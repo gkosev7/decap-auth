@@ -118,18 +118,20 @@ const handleCallback = async (url: URL, env: Env) => {
 
   const oauth2 = createOAuth(env);
   const accessToken = await oauth2.getToken({
-    code,
-    redirect_uri: `https://${url.hostname}/callback`,
+  	code,
+  	redirect_uri: `https://${url.hostname}/callback`,
   });
 
   const token =
-    typeof accessToken === "string"
-      ? accessToken
-      : (accessToken as any)?.access_token || (accessToken as any)?.token;
+  	typeof accessToken === "string"
+    	? accessToken
+    	: (accessToken as any)?.access_token || (accessToken as any)?.token;
 
-  if (!token) return new Response("No access token returned", { status: 500 });
+  if (typeof token !== "string" || token.length < 10) {
+  	return new Response("Invalid token returned from GitHub exchange", { status: 500 });
+}
 
-  return callbackScriptResponse('success', token);
+  return callbackScriptResponse("success", token);
 };
 
 export default {
