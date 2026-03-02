@@ -47,27 +47,36 @@ const handleAuth = async (url: URL, env: Env) => {
 
 const callbackScriptResponse = (status: string, token: string) => {
 	return new Response(
-		`
+		`<!doctype html>
 <html>
 <head>
-  <script>
-    const receiveMessage = (message) => {
-      window.opener.postMessage(
-        'authorization:github:${status}:${JSON.stringify({ token })}',
-        '*'
-      );
-      window.removeEventListener("message", receiveMessage, false);
-    }
-    window.addEventListener("message", receiveMessage, false);
-    window.opener.postMessage("authorizing:github", "*");
-  </script>
-  <body>
-    <p>Authorizing Decap...</p>
-  </body>
+  <meta charset="utf-8" />
 </head>
-</html>
-`,
-		{ headers: { 'Content-Type': 'text/html' } }
+<body>
+  <p>Authorizing Decap...</p>
+  <script>
+    (function () {
+      var payload = 'authorization:github:${status}:' + JSON.stringify({ token: ${JSON.stringify(token)} });
+
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(payload, '*');
+        window.close();
+        return;
+      }
+
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(payload, '*');
+        return;
+      }
+
+      document.body.innerHTML = '<p>Login successful. You may close this tab.</p>';
+    })();
+  </script>
+</body>
+</html>`,
+		{
+			headers: { 'Content-Type': 'text/html; charset=utf-8' },
+		}
 	);
 };
 
