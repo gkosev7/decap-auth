@@ -1,7 +1,7 @@
 #:schema node_modules/wrangler/config-schema.json
 
 # "compatibility_date" and "main" are values you are unlikely to need to change
-compatibility_date = "2025-11-17"     # schema version
+compatibility_date = "2026-03-02"     # schema version
 main = "src/index.ts"                 # entry point for the worker
 
 # The "name" parameter defines the name of the worker in your Cloudflare
