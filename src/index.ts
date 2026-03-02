@@ -27,23 +27,26 @@ const createOAuth = (env: Env) => {
 };
 
 const handleAuth = async (url: URL, env: Env) => {
-	const provider = url.searchParams.get('provider');
-	if (provider !== 'github') {
-		return new Response('Invalid provider', { status: 400 });
-	}
-
-  const repoIsPrivate = env.GITHUB_REPO_PRIVATE != undefined && env.GITHUB_REPO_PRIVATE !== '0';
+  const repoIsPrivate =
+    env.GITHUB_REPO_PRIVATE != undefined && env.GITHUB_REPO_PRIVATE !== '0';
   const repoScope = repoIsPrivate ? 'repo,user' : 'public_repo,user';
 
-	const oauth2 = createOAuth(env);
-	const authorizationUri = oauth2.authorizeURL({
-		redirect_uri: `https://${url.hostname}/callback?provider=github`,
-		scope: repoScope,
-		state: randomHex(4), // 4 bytes -> 8 hex chars
-	});
+  const oauth2 = createOAuth(env);
+  const authorizationUri = oauth2.authorizeURL({
+    redirect_uri: `https://${url.hostname}/callback`,
+    scope: repoScope,
+    state: randomHex(16),
+  });
 
-	return new Response(null, { headers: { location: authorizationUri }, status: 301 });
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location: authorizationUri,
+      "Cache-Control": "no-store",
+    },
+  });
 };
+
 
 const callbackScriptResponse = (status: string, token: string) => {
 	return new Response(
@@ -81,22 +84,23 @@ const callbackScriptResponse = (status: string, token: string) => {
 };
 
 const handleCallback = async (url: URL, env: Env) => {
-	const provider = url.searchParams.get('provider');
-	if (provider !== 'github') {
-		return new Response('Invalid provider', { status: 400 });
-	}
+  const code = url.searchParams.get('code');
+  if (!code) return new Response('Missing code', { status: 400 });
 
-	const code = url.searchParams.get('code');
-	if (!code) {
-		return new Response('Missing code', { status: 400 });
-	}
+  const oauth2 = createOAuth(env);
+  const accessToken = await oauth2.getToken({
+    code,
+    redirect_uri: `https://${url.hostname}/callback`,
+  });
 
-	const oauth2 = createOAuth(env);
-	const accessToken = await oauth2.getToken({
-		code,
-		redirect_uri: `https://${url.hostname}/callback?provider=github`,
-	});
-	return callbackScriptResponse('success', accessToken);
+  const token =
+    typeof accessToken === "string"
+      ? accessToken
+      : (accessToken as any)?.access_token || (accessToken as any)?.token;
+
+  if (!token) return new Response("No access token returned", { status: 500 });
+
+  return callbackScriptResponse('success', token);
 };
 
 export default {
