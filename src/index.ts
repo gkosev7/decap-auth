@@ -49,8 +49,10 @@ const handleAuth = async (url: URL, env: Env) => {
 
 
 const callbackScriptResponse = (status: string, token: string) => {
-	return new Response(
-		`<!doctype html>
+  const tokenJson = JSON.stringify({ token });
+
+  return new Response(
+    `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
@@ -59,30 +61,57 @@ const callbackScriptResponse = (status: string, token: string) => {
   <p>Authorizing Decap...</p>
   <script>
     (function () {
-      var payload = 'authorization:github:${status}:' + JSON.stringify({ token: ${JSON.stringify(token)} });
+      var payload = 'authorization:github:${status}:' + ${JSON.stringify(tokenJson)};
 
+      function sendSuccess() {
+        try {
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(payload, '*');
+            window.close();
+            return true;
+          }
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage(payload, '*');
+            return true;
+          }
+        } catch (e) {}
+        return false;
+      }
+
+      // If we have an opener, do the Decap handshake first
       if (window.opener && !window.opener.closed) {
-        window.opener.postMessage(payload, '*');
-        window.close();
-        return;
-      }
+        try {
+          window.opener.postMessage('authorizing:github', '*');
+        } catch (e) {}
 
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage(payload, '*');
-        return;
-      }
+        function receiveMessage() {
+          // Once we get *any* reply, send the token
+          window.removeEventListener('message', receiveMessage, false);
+          sendSuccess();
+        }
 
-      document.body.innerHTML = '<p>Login successful. You may close this tab.</p>';
+        window.addEventListener('message', receiveMessage, false);
+
+        // Fallback: if no reply comes back, still try after a moment
+        setTimeout(function () {
+          window.removeEventListener('message', receiveMessage, false);
+          sendSuccess();
+        }, 800);
+      } else {
+        // No opener, just try sending anyway (won't work) and show a message.
+        var ok = sendSuccess();
+        if (!ok) {
+          document.body.innerHTML =
+            '<p>Authorized, but this window was not opened by Decap CMS. Close it and log in from /admin.</p>';
+        }
+      }
     })();
   </script>
 </body>
 </html>`,
-		{
-			headers: { 'Content-Type': 'text/html; charset=utf-8' },
-		}
-	);
+    { headers: { "Content-Type": "text/html; charset=utf-8" } }
+  );
 };
-
 const handleCallback = async (url: URL, env: Env) => {
   const code = url.searchParams.get('code');
   if (!code) return new Response('Missing code', { status: 400 });
